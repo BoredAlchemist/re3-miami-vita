@@ -15,8 +15,8 @@ PREFIX  = arm-vita-eabi
 CC      = $(PREFIX)-gcc
 CXX      = $(PREFIX)-g++
 ARCH	:=	-mtune=cortex-a9 -march=armv7-a -mfpu=neon
-CFLAGS	:=	-g -Wl,-q -fno-optimize-sibling-calls -O2 -ftree-vectorize -fsingle-precision-constant -mfloat-abi=hard -ffast-math $(ARCH) $(DEFINES)
-CFLAGS	+=	$(INCLUDE) -DPSP2 -DMASTER -DFINAL -DLIBRW -DRW_GL3 -DAUDIO_OAL -DLIBRW_GLAD
+CFLAGS	:=	-g -Wl,-q -fno-optimize-sibling-calls -O2 -ftree-vectorize -mfloat-abi=hard $(ARCH) $(DEFINES)
+CFLAGS	+=	$(INCLUDE) -DPSP2 -DLIBRW -DRW_GL3 -DAUDIO_OAL -DLIBRW_GLAD
 CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-g $(ARCH) -Wl,-Map,$(notdir $*.map)

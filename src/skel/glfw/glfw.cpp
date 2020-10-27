@@ -128,6 +128,8 @@ void _psCreateFolder(const char *path)
 			mkdir(fullpath, 0755);
 		}
 	}*/
+	sprintf(fullpath, "ux0:data/gta3/%s", path);
+	sceIoMkdir(fullpath, 0755);
 #endif
 }
 
@@ -231,7 +233,9 @@ float gAxes[GLFW_GAMEPAD_AXIS_LAST+1];
 unsigned char* glfwGetJoystickButtons(int jid, int* count)
 {
 	SceCtrlData pad;
+	SceTouchData touch;
 	sceCtrlPeekBufferPositive(0, &pad, 1);
+	sceTouchPeek(0, &touch, 1);
 	gButtons[GLFW_GAMEPAD_BUTTON_CROSS]        = pad.buttons & SCE_CTRL_CROSS    ? GLFW_PRESS : GLFW_RELEASE;
 	gButtons[GLFW_GAMEPAD_BUTTON_CIRCLE]       = pad.buttons & SCE_CTRL_CIRCLE   ? GLFW_PRESS : GLFW_RELEASE;
 	gButtons[GLFW_GAMEPAD_BUTTON_SQUARE]       = pad.buttons & SCE_CTRL_SQUARE   ? GLFW_PRESS : GLFW_RELEASE;
@@ -243,6 +247,14 @@ unsigned char* glfwGetJoystickButtons(int jid, int* count)
 	gButtons[GLFW_GAMEPAD_BUTTON_GUIDE]        = GLFW_RELEASE;
 	gButtons[GLFW_GAMEPAD_BUTTON_LEFT_THUMB]   = GLFW_RELEASE;
 	gButtons[GLFW_GAMEPAD_BUTTON_RIGHT_THUMB]  = GLFW_RELEASE;
+	for (int i = 0; i < touch.reportNum; i++) {
+		if (touch.report[i].y > 1088/2) {
+			if (touch.report[i].x < 1920/2)
+				gButtons[GLFW_GAMEPAD_BUTTON_LEFT_THUMB]  = GLFW_PRESS;
+			else
+				gButtons[GLFW_GAMEPAD_BUTTON_RIGHT_THUMB] = GLFW_PRESS;
+		}
+	}
 	gButtons[GLFW_GAMEPAD_BUTTON_DPAD_UP]      = pad.buttons & SCE_CTRL_UP       ? GLFW_PRESS : GLFW_RELEASE;
 	gButtons[GLFW_GAMEPAD_BUTTON_DPAD_RIGHT]   = pad.buttons & SCE_CTRL_RIGHT    ? GLFW_PRESS : GLFW_RELEASE;
 	gButtons[GLFW_GAMEPAD_BUTTON_DPAD_DOWN]    = pad.buttons & SCE_CTRL_DOWN     ? GLFW_PRESS : GLFW_RELEASE;
@@ -255,13 +267,23 @@ unsigned char* glfwGetJoystickButtons(int jid, int* count)
 float* glfwGetJoystickAxes(int jid, int* count)
 {
 	SceCtrlData pad;
+	SceTouchData touch;
 	sceCtrlPeekBufferPositive(0, &pad, 1);
+	sceTouchPeek(0, &touch, 1);
 	gAxes[GLFW_GAMEPAD_AXIS_LEFT_X]        = ((float)pad.lx - 128.0f) / 128.0f;
 	gAxes[GLFW_GAMEPAD_AXIS_LEFT_Y]        = ((float)pad.ly - 128.0f) / 128.0f;
 	gAxes[GLFW_GAMEPAD_AXIS_RIGHT_X]       = ((float)pad.rx - 128.0f) / 128.0f;
 	gAxes[GLFW_GAMEPAD_AXIS_RIGHT_Y]       = ((float)pad.ry - 128.0f) / 128.0f;
-	gAxes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER]  = 0.0f;
-	gAxes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] = 0.0f;
+	gAxes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER]  = -1.0f;
+	gAxes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] = -1.0f;
+	for (int i = 0; i < touch.reportNum; i++) {
+		if (touch.report[i].y < 1088/2) {
+			if (touch.report[i].x < 1920/2)
+				gAxes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER]  = 1.0f;
+			else
+				gAxes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] = 1.0f;
+		}
+	}
 	if (count)
 		*count = GLFW_GAMEPAD_AXIS_LAST+1;
 	return gAxes;
@@ -289,6 +311,40 @@ int glfwJoystickIsGamepad(int jid)
 /*
  *****************************************************************************
  */
+ 
+#define CLOCK_MONOTONIC 0
+
+#include <psp2/kernel/processmgr.h>
+#include <psp2/rtc.h>
+
+int clock_gettime(int clk_id, struct timespec *tp) {
+    if (clk_id == CLOCK_MONOTONIC)
+    {
+        SceKernelSysClock ticks;
+        sceKernelGetProcessTime(&ticks);
+
+        tp->tv_sec = ticks/(1000*1000);
+        tp->tv_nsec = (ticks * 1000) % (1000*1000*1000);
+
+        return 0;
+    }
+
+    else if (clk_id == CLOCK_REALTIME)
+    {
+        time_t seconds;
+        SceDateTime time;
+        sceRtcGetCurrentClockLocalTime(&time);
+
+        sceRtcGetTime_t(&time, &seconds);
+
+        tp->tv_sec = seconds;
+        tp->tv_nsec = time.microsecond * 1000;
+        return 0;
+    }
+
+    return -ENOSYS;
+}
+
 #ifdef _WIN32
 #pragma comment( lib, "Winmm.lib" ) // Needed for time
 RwUInt32
@@ -313,11 +369,11 @@ double
 psTimer(void)
 {
 	struct timespec start; 
-/*#ifdef __linux__
+#ifdef __linux__
 	clock_gettime(CLOCK_MONOTONIC_RAW, &start);
 #else
 	clock_gettime(CLOCK_MONOTONIC, &start);
-#endif*/
+#endif
 	return start.tv_sec * 1000.0 + start.tv_nsec/1000000.0;
 }
 #endif       
@@ -1552,6 +1608,7 @@ int
 main(int argc, char *argv[])
 {
 	sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);
+	sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, SCE_TOUCH_SAMPLING_STATE_START);
 	scePowerSetArmClockFrequency(444);
 	scePowerSetBusClockFrequency(222);
 	scePowerSetGpuClockFrequency(222);
